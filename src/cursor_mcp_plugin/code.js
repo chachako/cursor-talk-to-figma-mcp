@@ -253,6 +253,8 @@ async function handleCommand(command, params) {
       return await removeVariableMode(params);
     case "set_variable_value_for_mode":
       return await setVariableValueForMode(params);
+    case "set_node_explicit_variable_mode":
+      return await setNodeExplicitVariableMode(params);
     default:
       throw new Error(`Unknown command: ${command}`);
   }
@@ -4681,5 +4683,42 @@ async function setVariableValueForMode(params) {
     };
   } catch (error) {
     throw new Error(`Error setting variable value for mode: ${error.message}`);
+  }
+}
+
+async function setNodeExplicitVariableMode(params) {
+  const { nodeId, collectionId, modeId } = params;
+
+  if (!nodeId || !collectionId || !modeId) {
+    throw new Error("Missing required parameters: nodeId, collectionId, or modeId");
+  }
+
+  const node = await figma.getNodeById(nodeId);
+  if (!node) {
+    throw new Error(`Node with ID '${nodeId}' not found.`);
+  }
+
+  // Ensure the node is a SceneNode, as setExplicitVariableModeForCollection is on SceneNode
+  if (!("setExplicitVariableModeForCollection" in node)) {
+    throw new Error(`Node with ID '${nodeId}' (type: ${node.type}) does not support explicit variable modes.`);
+  }
+
+  const collection = figma.variables.getVariableCollectionById(collectionId);
+  if (!collection) {
+    throw new Error(`Variable collection with ID '${collectionId}' not found.`);
+  }
+
+  try {
+    // Cast to SceneNode to satisfy TypeScript if it were TS, and for clarity
+    // (node as SceneNode).setExplicitVariableModeForCollection(collection, modeId); // Removed type assertion for JS
+    node.setExplicitVariableModeForCollection(collection, modeId); // Direct call
+    return {
+      success: true,
+      nodeName: node.name,
+      message: `Successfully set explicit mode for node '${node.name}' (collection: ${collection.name}, mode: ${modeId})`
+    };
+  } catch (e) {
+    console.error("Error in setNodeExplicitVariableMode:", e);
+    throw new Error(`Failed to set explicit variable mode: ${e.message || e}`);
   }
 }

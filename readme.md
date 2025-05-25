@@ -192,6 +192,12 @@ The MCP server provides the following tools for interacting with Figma:
 - `rename_variable_mode` - Rename an existing mode in a variable collection
 - `remove_variable_mode` - Remove a mode from a variable collection (cannot remove the last mode)
 - `set_variable_value_for_mode` - Set a variable's value for a specific mode
+- `set_node_explicit_variable_mode` - Sets an explicit variable mode for a specific node and variable collection. This overrides the mode inherited from the page or parent layers for that particular node and collection.
+    - **Parameters**:
+        - `nodeId`: (string) The ID of the node to modify.
+        - `collectionId`: (string) The ID of the variable collection for which the mode is being set.
+        - `modeId`: (string) The ID of the mode to apply to the node for the given collection.
+    - **Note**: The Figma plugin must be updated to handle the `set_node_explicit_variable_mode` command and call the appropriate Figma API (`node.setExplicitVariableModeForCollection()`).
 
 ### Components & Styles
 

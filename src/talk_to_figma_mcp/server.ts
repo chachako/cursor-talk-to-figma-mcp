@@ -3366,6 +3366,56 @@ server.tool(
   }
 );
 
+// Set Node Explicit Variable Mode Tool
+server.tool(
+  "set_node_explicit_variable_mode",
+  "Set a node's explicit variable mode",
+  {
+    nodeId: z.string().describe("The ID of the node to modify"),
+    collectionId: z.string().describe("The ID of the variable collection"),
+    modeId: z.string().describe("The ID of the mode"),
+  },
+  async ({ nodeId, collectionId, modeId }) => {
+    try {
+      const figmaResult = await sendCommandToFigma("set_node_explicit_variable_mode", {
+        nodeId,
+        collectionId,
+        modeId,
+      });
+
+      // It's good practice to check the actual structure of figmaResult from the plugin.
+      // For now, we'll provide a generic success message.
+      // If the plugin sends back { success: true, nodeName: "...", ... }, we can use that.
+      let successMessage = `Successfully set explicit variable mode for node ID "${nodeId}" for collection "${collectionId}" to mode "${modeId}".`;
+
+      if (typeof figmaResult === 'object' && figmaResult !== null) {
+          if ('nodeName' in figmaResult && typeof (figmaResult as any).nodeName === 'string') {
+              successMessage = `Successfully set explicit variable mode for node "${(figmaResult as any).nodeName}" (ID: ${nodeId}) for collection "${collectionId}" to mode "${modeId}".`;
+          } else if ('message' in figmaResult && typeof (figmaResult as any).message === 'string') {
+              successMessage = (figmaResult as any).message;
+          }
+      }
+      
+      return {
+        content: [
+          {
+            type: "text",
+            text: successMessage,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error setting node explicit variable mode: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
 
 // Define command types and parameters
 type FigmaCommand =
@@ -3418,7 +3468,8 @@ type FigmaCommand =
   | "create_variable_mode"
   | "rename_variable_mode"
   | "remove_variable_mode"
-  | "set_variable_value_for_mode";
+  | "set_variable_value_for_mode"
+  | "set_node_explicit_variable_mode"; // Added new command
 
 type CommandParams = {
   get_document_info: Record<string, never>;
@@ -3618,7 +3669,11 @@ type CommandParams = {
     modeId: string;
     value: any;
   };
-  
+  set_node_explicit_variable_mode: { // Added params for the new command
+    nodeId: string;
+    collectionId: string;
+    modeId: string;
+  };
 };
 
 
@@ -3933,7 +3988,8 @@ const figmaCommandEnumValues: [FigmaCommand, ...FigmaCommand[]] = [
   "set_item_spacing", "get_reactions", "set_default_connector", "create_connections",
   "get_local_variables", "create_variable_collection", "create_color_variable",
   "bind_color_to_variable", "apply_variable_to_nodes", "create_variable_mode",
-  "rename_variable_mode", "remove_variable_mode", "set_variable_value_for_mode"
+  "rename_variable_mode", "remove_variable_mode", "set_variable_value_for_mode",
+  "set_node_explicit_variable_mode"
 ];
 
 const BatchToolCallSchema = z.object({
