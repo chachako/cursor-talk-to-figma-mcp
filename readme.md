@@ -205,6 +205,37 @@ The MCP server provides the following tools for interacting with Figma:
 
 - `export_node_as_image` - Export a node as an image (PNG, JPG, SVG, or PDF) - limited support on image currently returning base64 as text
 
+### Batch Operations
+
+- `execute_multiple_tools` - Executes a sequence of Figma commands in batch. This allows multiple operations to be performed with a single tool call, improving efficiency.
+    - **Parameters**:
+        - `toolCalls`: An array of objects, where each object represents a single Figma command to execute. Each object must contain:
+            - `command`: (string) The name of the Figma command to execute (must be one of the valid `FigmaCommand` types listed in `server.ts`).
+            - `params`: (object, optional) An object containing the parameters for the specified `command`. The structure of `params` depends on the `command` being called. This can be omitted if the command takes no parameters.
+    - **Returns**:
+        - On success: A JSON string with an object containing `batchStatus: "success"` and a `results` array. Each element in the `results` array corresponds to a successfully executed command and includes `{ command: string, status: "success", result: any }`.
+        - On failure: If any command in the sequence fails, execution stops, and a JSON string is returned with an object containing `batchStatus: "failed"`. This object includes a `message` describing the error, `successfulResults` (an array of results from commands that succeeded before the failure), and `failedCommand` (the name of the command that failed).
+    - **Example Usage**:
+      ```json
+      {
+        "toolCalls": [
+          {
+            "command": "create_rectangle",
+            "params": { "x": 0, "y": 0, "width": 100, "height": 50, "name": "BatchRect1" }
+          },
+          {
+            "command": "set_fill_color",
+            "params": { "nodeId": "NODE_ID_OF_BatchRect1", "r": 1, "g": 0, "b": 0, "a": 1 }
+          },
+          {
+            "command": "get_node_info",
+            "params": { "nodeId": "ANOTHER_NODE_ID" }
+          }
+        ]
+      }
+      ```
+    - **Note**: Commands are executed sequentially.
+
 ### Connection Management
 
 - `join_channel` - Join a specific channel to communicate with Figma

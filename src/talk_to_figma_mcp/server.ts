@@ -3920,5 +3920,78 @@ main().catch(error => {
   process.exit(1);
 });
 
+// Helper array for Zod enum (must be kept in sync with FigmaCommand type)
+const figmaCommandEnumValues: [FigmaCommand, ...FigmaCommand[]] = [
+  "get_document_info", "get_selection", "get_node_info", "get_nodes_info", "read_my_design",
+  "create_rectangle", "create_frame", "create_text", "set_fill_color", "set_stroke_color",
+  "move_node", "reparent_node", "resize_node", "delete_node", "delete_multiple_nodes",
+  "get_styles", "get_local_components", "create_component_instance", "get_instance_overrides",
+  "set_instance_overrides", "export_node_as_image", "join", "set_corner_radius", "clone_node",
+  "set_text_content", "set_node_name", "set_multiple_node_names", "scan_text_nodes",
+  "set_multiple_text_contents", "get_annotations", "set_annotation", "set_multiple_annotations",
+  "scan_nodes_by_types", "set_layout_mode", "set_padding", "set_axis_align", "set_layout_sizing",
+  "set_item_spacing", "get_reactions", "set_default_connector", "create_connections",
+  "get_local_variables", "create_variable_collection", "create_color_variable",
+  "bind_color_to_variable", "apply_variable_to_nodes", "create_variable_mode",
+  "rename_variable_mode", "remove_variable_mode", "set_variable_value_for_mode"
+];
+
+const BatchToolCallSchema = z.object({
+  command: z.enum(figmaCommandEnumValues).describe("The Figma command to execute (must be one of the FigmaCommand type values)."),
+  params: z.any().optional().describe("The parameters for the Figma command. Structure depends on the command. Can be omitted if the command takes no parameters.")
+});
+
+// Execute Multiple Tools Tool
+server.tool(
+  "execute_multiple_tools",
+  "Executes a sequence of Figma commands in batch. Commands are executed sequentially, and if one fails, subsequent commands are not executed.",
+  {
+    toolCalls: z.array(BatchToolCallSchema).describe("An array of Figma commands to execute in sequence.")
+  },
+  async ({ toolCalls }) => {
+    const results = [];
+    logger.info(`Starting batch execution of ${toolCalls.length} Figma commands.`);
+
+    for (let i = 0; i < toolCalls.length; i++) {
+      const call = toolCalls[i];
+      logger.info(`Executing command ${i + 1}/${toolCalls.length}: ${call.command}`);
+      try {
+        // Ensure params is an object, even if undefined in the call, as sendCommandToFigma expects it.
+        const paramsForCommand = call.params || {};
+        const result = await sendCommandToFigma(call.command as FigmaCommand, paramsForCommand);
+        results.push({ command: call.command, status: "success", result });
+        logger.info(`Command ${call.command} Succeeded.`);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error(`Command ${call.command} Failed: ${errorMessage}`);
+        // Immediately return upon the first error.
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                batchStatus: "failed",
+                message: `Error executing command '${call.command}' (command ${i + 1} of ${toolCalls.length}): ${errorMessage}`,
+                successfulResults: results,
+                failedCommand: call.command,
+              })
+            }
+          ]
+        };
+      }
+    }
+
+    logger.info("Batch execution completed successfully.");
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({ batchStatus: "success", results })
+        }
+      ]
+    };
+  }
+);
+
 
 
