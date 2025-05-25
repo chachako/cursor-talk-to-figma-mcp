@@ -754,6 +754,64 @@ server.tool(
   }
 );
 
+// Reparent Node Tool
+server.tool(
+  "reparent_node",
+  "Move a node to a different parent container in Figma",
+  {
+    nodeId: z.string().describe("The ID of the node to reparent"),
+    parentId: z.string().describe("The ID of the new parent container"),
+    preservePosition: z
+      .boolean()
+      .optional()
+      .describe("Whether to preserve the node's absolute position (default: true)"),
+    x: z
+      .number()
+      .optional()
+      .describe("Optional new X position relative to new parent"),
+    y: z
+      .number()
+      .optional()
+      .describe("Optional new Y position relative to new parent"),
+  },
+  async ({ nodeId, parentId, preservePosition = true, x, y }) => {
+    try {
+      const result = await sendCommandToFigma("reparent_node", {
+        nodeId,
+        parentId,
+        preservePosition,
+        x,
+        y,
+      });
+      const typedResult = result as {
+        success: boolean;
+        nodeId: string;
+        parentId: string;
+        previousParentId?: string;
+        x?: number;
+        y?: number;
+      };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully moved node to new parent container${typedResult.previousParentId ? ` (from ${typedResult.previousParentId})` : ''}. Position: (${typedResult.x}, ${typedResult.y})`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error reparenting node: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
 // Resize Node Tool
 server.tool(
   "resize_node",
@@ -2794,6 +2852,7 @@ type FigmaCommand =
   | "set_fill_color"
   | "set_stroke_color"
   | "move_node"
+  | "reparent_node"
   | "resize_node"
   | "delete_node"
   | "delete_multiple_nodes"
@@ -2877,6 +2936,13 @@ type CommandParams = {
     nodeId: string;
     x: number;
     y: number;
+  };
+  reparent_node: {
+    nodeId: string;
+    parentId: string;
+    preservePosition?: boolean;
+    x?: number;
+    y?: number;
   };
   resize_node: {
     nodeId: string;

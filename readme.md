@@ -166,7 +166,8 @@ The MCP server provides the following tools for interacting with Figma:
 
 ### Layout & Organization
 
-- `move_node` - Move a node to a new position
+- `move_node` - Move a node to a new position within the same parent
+- `reparent_node` - Move a node to a different parent container (Group, Frame, etc.) with optional position control
 - `resize_node` - Resize a node with new dimensions
 - `delete_node` - Delete a node
 - `delete_multiple_nodes` - Delete multiple nodes at once efficiently

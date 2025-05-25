@@ -133,6 +133,8 @@ async function handleCommand(command, params) {
       return await setStrokeColor(params);
     case "move_node":
       return await moveNode(params);
+    case "reparent_node":
+      return await reparentNode(params);
     case "resize_node":
       return await resizeNode(params);
     case "delete_node":
@@ -1036,6 +1038,91 @@ async function moveNode(params) {
     x: node.x,
     y: node.y,
   };
+}
+
+async function reparentNode(params) {
+  const { nodeId, parentId, preservePosition = true, x, y } = params || {};
+
+  if (!nodeId) {
+    throw new Error("Missing nodeId parameter");
+  }
+
+  if (!parentId) {
+    throw new Error("Missing parentId parameter");
+  }
+
+  const node = await figma.getNodeByIdAsync(nodeId);
+  if (!node) {
+    throw new Error(`Node not found with ID: ${nodeId}`);
+  }
+
+  const newParent = await figma.getNodeByIdAsync(parentId);
+  if (!newParent) {
+    throw new Error(`Parent node not found with ID: ${parentId}`);
+  }
+
+  // Check if the new parent can have children
+  if (!("appendChild" in newParent)) {
+    throw new Error(`Node type ${newParent.type} does not support children`);
+  }
+
+  // Save current position info
+  const oldParent = node.parent;
+  const previousParentId = oldParent ? oldParent.id : undefined;
+  
+  let currentAbsoluteX = 0;
+  let currentAbsoluteY = 0;
+
+  // Calculate absolute position if we need to preserve it
+  if (preservePosition && node.absoluteBoundingBox) {
+    currentAbsoluteX = node.absoluteBoundingBox.x;
+    currentAbsoluteY = node.absoluteBoundingBox.y;
+  }
+
+  try {
+    // Move the node to new parent
+    newParent.appendChild(node);
+
+    // Set position based on parameters
+    if (x !== undefined && y !== undefined) {
+      // Use explicit coordinates if provided
+      if ("x" in node && "y" in node) {
+        node.x = x;
+        node.y = y;
+      }
+    } else if (preservePosition && node.absoluteBoundingBox && newParent.absoluteBoundingBox) {
+      // Calculate relative position to preserve absolute position
+      if ("x" in node && "y" in node) {
+        node.x = currentAbsoluteX - newParent.absoluteBoundingBox.x;
+        node.y = currentAbsoluteY - newParent.absoluteBoundingBox.y;
+      }
+    } else if (!preservePosition) {
+      // Don't preserve position - let Figma place it naturally
+      if ("x" in node && "y" in node) {
+        node.x = 0;
+        node.y = 0;
+      }
+    }
+
+    // If the new parent has auto-layout, the node might need absolute positioning
+    if ("layoutMode" in newParent && newParent.layoutMode !== "NONE") {
+      if ("layoutPositioning" in node) {
+        node.layoutPositioning = "ABSOLUTE";
+      }
+    }
+
+    return {
+      success: true,
+      nodeId: node.id,
+      parentId: newParent.id,
+      previousParentId,
+      x: "x" in node ? node.x : undefined,
+      y: "y" in node ? node.y : undefined,
+      name: node.name,
+    };
+  } catch (error) {
+    throw new Error(`Error reparenting node: ${error.message}`);
+  }
 }
 
 async function resizeNode(params) {
