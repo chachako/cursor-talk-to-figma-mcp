@@ -2838,6 +2838,534 @@ This detailed process ensures you correctly interpret the reaction data, prepare
   }
 );
 
+// Variable Management Strategy Prompt
+server.prompt(
+  "variable_management_strategy",
+  "Comprehensive guide for working with Figma variables and design tokens",
+  (extra) => {
+    return {
+      messages: [
+        {
+          role: "assistant",
+          content: {
+            type: "text",
+            text: `Variable Management Strategy for Figma
+
+When working with Figma variables and design tokens, follow this systematic approach:
+
+## Getting Started
+
+1. **Get existing variables**:
+   - Use \`get_local_variables()\` to see all current variables
+   - Use \`get_local_variables({ type: "COLOR" })\` to filter by type
+
+2. **Create variable collections**:
+   - Use \`create_variable_collection({ name: "Design System" })\` to organize variables
+   - Organize by purpose: "Colors", "Spacing", "Typography", etc.
+
+## Creating Color Variables
+
+1. **Create color variables**:
+   \`\`\`
+   create_color_variable({
+     name: "Primary/500",
+     collectionId: "collection-id",
+     color: { r: 0.2, g: 0.4, b: 0.8, a: 1 }
+   })
+   \`\`\`
+
+2. **Use semantic naming**:
+   - Good: "Primary/500", "Gray/100", "Success/600"
+   - Avoid: "Blue", "Light Gray", "Green Button"
+
+## Managing Variable Modes
+
+1. **Create modes for themes**:
+   \`\`\`
+   create_variable_mode({
+     collectionId: "collection-id",
+     name: "Dark Mode"
+   })
+   \`\`\`
+
+2. **Set different values per mode**:
+   \`\`\`
+   set_variable_value_for_mode({
+     variableId: "variable-id",
+     modeId: "light-mode-id",
+     value: { r: 0.2, g: 0.4, b: 0.8, a: 1 }
+   })
+   
+   set_variable_value_for_mode({
+     variableId: "variable-id", 
+     modeId: "dark-mode-id",
+     value: { r: 0.4, g: 0.6, b: 1, a: 1 }
+   })
+   \`\`\`
+
+3. **Mode management best practices**:
+   - Create meaningful mode names: "Light", "Dark", "High Contrast"
+   - Always set values for all modes when creating variables
+   - Use \`rename_variable_mode\` to update mode names as design evolves
+   - Cannot remove the last mode from a collection
+
+## Applying Variables to Design
+
+1. **Single node binding**:
+   \`\`\`
+   bind_color_to_variable({
+     nodeId: "node-id",
+     variableId: "variable-id",
+     property: "fill" // or "stroke"
+   })
+   \`\`\`
+
+2. **Batch application**:
+   \`\`\`
+   apply_variable_to_nodes({
+     nodeIds: ["id1", "id2", "id3"],
+     variableId: "variable-id",
+     property: "fill"
+   })
+   \`\`\`
+
+## Workflow Tips
+
+- Start with a design system audit using \`get_local_variables()\`
+- Create collections before individual variables
+- Use consistent naming conventions across your design system
+- Apply variables systematically, starting with primary colors
+- Use batch operations for efficiency when applying to many nodes
+- Test variable changes in different modes if using multiple themes
+
+## Error Handling
+
+- Always check if nodes support the target property (fill/stroke)
+- Verify variable types match the operation (COLOR variables for color binding)
+- Handle nodes with multiple fills/strokes using paintIndex parameter
+- Use progress tracking for large batch operations`,
+          },
+        },
+      ],
+      description: "Comprehensive strategy for working with Figma variables and design tokens",
+    };
+  }
+);
+
+// Get Local Variables Tool
+server.tool(
+  "get_local_variables",
+  "Get all local variables from the current Figma document",
+  {
+    type: z
+      .enum(["COLOR", "FLOAT", "STRING", "BOOLEAN"])
+      .optional()
+      .describe("Optional filter by variable type"),
+  },
+  async ({ type }) => {
+    try {
+      const result = await sendCommandToFigma("get_local_variables", { type });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error getting local variables: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// Create Variable Collection Tool
+server.tool(
+  "create_variable_collection",
+  "Create a new variable collection in Figma",
+  {
+    name: z.string().describe("Name of the variable collection"),
+  },
+  async ({ name }) => {
+    try {
+      const result = await sendCommandToFigma("create_variable_collection", { name });
+      const typedResult = result as { id: string; name: string };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Created variable collection "${typedResult.name}" with ID: ${typedResult.id}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error creating variable collection: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// Create Color Variable Tool
+server.tool(
+  "create_color_variable",
+  "Create a new color variable in a variable collection",
+  {
+    name: z.string().describe("Name of the color variable"),
+    collectionId: z.string().describe("ID of the variable collection"),
+    color: z
+      .object({
+        r: z.number().min(0).max(1).describe("Red component (0-1)"),
+        g: z.number().min(0).max(1).describe("Green component (0-1)"),
+        b: z.number().min(0).max(1).describe("Blue component (0-1)"),
+        a: z.number().min(0).max(1).optional().describe("Alpha component (0-1)"),
+      })
+      .describe("Color value in RGBA format"),
+    modeId: z.string().optional().describe("Optional mode ID to set the value for"),
+  },
+  async ({ name, collectionId, color, modeId }) => {
+    try {
+      const result = await sendCommandToFigma("create_color_variable", {
+        name,
+        collectionId,
+        color,
+        modeId,
+      });
+      const typedResult = result as { id: string; name: string; collectionName: string };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Created color variable "${typedResult.name}" with ID: ${typedResult.id} in collection "${typedResult.collectionName}"`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error creating color variable: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// Bind Color to Variable Tool
+server.tool(
+  "bind_color_to_variable",
+  "Bind a node's color property to a variable",
+  {
+    nodeId: z.string().describe("The ID of the node to modify"),
+    variableId: z.string().describe("The ID of the color variable to bind"),
+    property: z.enum(["fill", "stroke"]).describe("Which color property to bind (fill or stroke)"),
+    paintIndex: z.number().optional().describe("Index of the paint to bind (default: 0)"),
+  },
+  async ({ nodeId, variableId, property, paintIndex }) => {
+    try {
+      const result = await sendCommandToFigma("bind_color_to_variable", {
+        nodeId,
+        variableId,
+        property,
+        paintIndex: paintIndex || 0,
+      });
+      const typedResult = result as { 
+        success: boolean; 
+        nodeName: string; 
+        variableName: string; 
+        property: string;
+      };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully bound ${typedResult.property} of node "${typedResult.nodeName}" to variable "${typedResult.variableName}"`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error binding color to variable: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// Apply Variable to Multiple Nodes Tool
+server.tool(
+  "apply_variable_to_nodes",
+  "Apply a variable to multiple nodes at once",
+  {
+    nodeIds: z.array(z.string()).describe("Array of node IDs to apply the variable to"),
+    variableId: z.string().describe("The ID of the variable to apply"),
+    property: z.enum(["fill", "stroke"]).describe("Which property to apply the variable to"),
+    paintIndex: z.number().optional().describe("Index of the paint to modify (default: 0)"),
+  },
+  async ({ nodeIds, variableId, property, paintIndex }, extra) => {
+    try {
+      if (!nodeIds || nodeIds.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No node IDs provided",
+            },
+          ],
+        };
+      }
+
+      // Initial response to indicate we're starting the process
+      const initialStatus = {
+        type: "text" as const,
+        text: `Starting variable application to ${nodeIds.length} nodes. This will be processed in batches...`,
+      };
+
+      const result = await sendCommandToFigma("apply_variable_to_nodes", {
+        nodeIds,
+        variableId,
+        property,
+        paintIndex: paintIndex || 0,
+      });
+
+      // Cast the result to a specific type
+      interface VariableApplicationResult {
+        success: boolean;
+        variableName: string;
+        property: string;
+        appliedCount: number;
+        failedCount: number;
+        totalNodes: number;
+        completedInChunks?: number;
+        results?: Array<{
+          success: boolean;
+          nodeId: string;
+          nodeName?: string;
+          error?: string;
+        }>;
+      }
+
+      const typedResult = result as VariableApplicationResult;
+
+      const progressText = `
+      Variable application completed:
+      - Applied "${typedResult.variableName}" to ${typedResult.property} property
+      - ${typedResult.appliedCount} of ${typedResult.totalNodes} nodes successfully updated
+      - ${typedResult.failedCount} failed
+      ${typedResult.completedInChunks ? `- Processed in ${typedResult.completedInChunks} batches` : ''}
+      `;
+
+      // Show failed results if any
+      const failedResults = typedResult.results?.filter(item => !item.success) || [];
+      let detailedResponse = "";
+      if (failedResults.length > 0) {
+        detailedResponse = `\n\nNodes that failed:\n${failedResults.map(item =>
+          `- ${item.nodeId}${item.nodeName ? ` (${item.nodeName})` : ''}: ${item.error || "Unknown error"}`
+        ).join('\n')}`;
+      }
+
+      return {
+        content: [
+          initialStatus,
+          {
+            type: "text" as const,
+            text: progressText + detailedResponse,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error applying variable to nodes: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// Create Variable Mode Tool
+server.tool(
+  "create_variable_mode",
+  "Create a new mode in a variable collection",
+  {
+    collectionId: z.string().describe("The ID of the variable collection"),
+    name: z.string().describe("Name of the new mode"),
+  },
+  async ({ collectionId, name }) => {
+    try {
+      const result = await sendCommandToFigma("create_variable_mode", {
+        collectionId,
+        name,
+      });
+      const typedResult = result as { id: string; name: string; collectionName: string };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Created variable mode "${typedResult.name}" with ID: ${typedResult.id} in collection "${typedResult.collectionName}"`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error creating variable mode: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// Rename Variable Mode Tool
+server.tool(
+  "rename_variable_mode",
+  "Rename an existing mode in a variable collection",
+  {
+    collectionId: z.string().describe("The ID of the variable collection"),
+    modeId: z.string().describe("The ID of the mode to rename"),
+    name: z.string().describe("New name for the mode"),
+  },
+  async ({ collectionId, modeId, name }) => {
+    try {
+      const result = await sendCommandToFigma("rename_variable_mode", {
+        collectionId,
+        modeId,
+        name,
+      });
+      const typedResult = result as { 
+        success: boolean; 
+        oldName: string; 
+        newName: string; 
+        collectionName: string;
+      };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully renamed mode from "${typedResult.oldName}" to "${typedResult.newName}" in collection "${typedResult.collectionName}"`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error renaming variable mode: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// Remove Variable Mode Tool
+server.tool(
+  "remove_variable_mode",
+  "Remove a mode from a variable collection",
+  {
+    collectionId: z.string().describe("The ID of the variable collection"),
+    modeId: z.string().describe("The ID of the mode to remove"),
+  },
+  async ({ collectionId, modeId }) => {
+    try {
+      const result = await sendCommandToFigma("remove_variable_mode", {
+        collectionId,
+        modeId,
+      });
+      const typedResult = result as { 
+        success: boolean; 
+        removedModeName: string; 
+        collectionName: string;
+      };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully removed mode "${typedResult.removedModeName}" from collection "${typedResult.collectionName}"`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error removing variable mode: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// Set Variable Value for Mode Tool
+server.tool(
+  "set_variable_value_for_mode",
+  "Set a variable's value for a specific mode",
+  {
+    variableId: z.string().describe("The ID of the variable"),
+    modeId: z.string().describe("The ID of the mode"),
+    value: z.any().describe("The value to set (type depends on variable type)"),
+  },
+  async ({ variableId, modeId, value }) => {
+    try {
+      const result = await sendCommandToFigma("set_variable_value_for_mode", {
+        variableId,
+        modeId,
+        value,
+      });
+      const typedResult = result as { 
+        success: boolean; 
+        variableName: string; 
+        modeName: string;
+        value: any;
+      };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully set value for variable "${typedResult.variableName}" in mode "${typedResult.modeName}" to: ${JSON.stringify(typedResult.value)}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error setting variable value for mode: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
 
 // Define command types and parameters
 type FigmaCommand =
@@ -2881,7 +3409,16 @@ type FigmaCommand =
   | "set_item_spacing"
   | "get_reactions"
   | "set_default_connector"
-  | "create_connections";
+  | "create_connections"
+  | "get_local_variables"
+  | "create_variable_collection"
+  | "create_color_variable"
+  | "bind_color_to_variable"
+  | "apply_variable_to_nodes"
+  | "create_variable_mode"
+  | "rename_variable_mode"
+  | "remove_variable_mode"
+  | "set_variable_value_for_mode";
 
 type CommandParams = {
   get_document_info: Record<string, never>;
@@ -3038,6 +3575,48 @@ type CommandParams = {
       endNodeId: string;
       text?: string;
     }>;
+  };
+  get_local_variables: {
+    type?: "COLOR" | "FLOAT" | "STRING" | "BOOLEAN";
+  };
+  create_variable_collection: {
+    name: string;
+  };
+  create_color_variable: {
+    name: string;
+    collectionId: string;
+    color: { r: number; g: number; b: number; a?: number };
+    modeId?: string;
+  };
+  bind_color_to_variable: {
+    nodeId: string;
+    variableId: string;
+    property: "fill" | "stroke";
+    paintIndex?: number;
+  };
+  apply_variable_to_nodes: {
+    nodeIds: string[];
+    variableId: string;
+    property: "fill" | "stroke";
+    paintIndex?: number;
+  };
+  create_variable_mode: {
+    collectionId: string;
+    name: string;
+  };
+  rename_variable_mode: {
+    collectionId: string;
+    modeId: string;
+    name: string;
+  };
+  remove_variable_mode: {
+    collectionId: string;
+    modeId: string;
+  };
+  set_variable_value_for_mode: {
+    variableId: string;
+    modeId: string;
+    value: any;
   };
   
 };

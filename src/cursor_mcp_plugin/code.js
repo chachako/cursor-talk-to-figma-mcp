@@ -235,6 +235,24 @@ async function handleCommand(command, params) {
       return await setDefaultConnector(params);
     case "create_connections":
       return await createConnections(params);
+    case "get_local_variables":
+      return await getLocalVariables(params);
+    case "create_variable_collection":
+      return await createVariableCollection(params);
+    case "create_color_variable":
+      return await createColorVariable(params);
+    case "bind_color_to_variable":
+      return await bindColorToVariable(params);
+    case "apply_variable_to_nodes":
+      return await applyVariableToNodes(params);
+    case "create_variable_mode":
+      return await createVariableMode(params);
+    case "rename_variable_mode":
+      return await renameVariableMode(params);
+    case "remove_variable_mode":
+      return await removeVariableMode(params);
+    case "set_variable_value_for_mode":
+      return await setVariableValueForMode(params);
     default:
       throw new Error(`Unknown command: ${command}`);
   }
@@ -4131,4 +4149,537 @@ async function createConnections(params) {
     count: results.length,
     connections: results
   };
+}
+
+// Get Local Variables Function
+async function getLocalVariables(params) {
+  const { type } = params || {};
+  
+  try {
+    let variables;
+    if (type) {
+      variables = await figma.variables.getLocalVariablesAsync(type);
+    } else {
+      variables = await figma.variables.getLocalVariablesAsync();
+    }
+    
+    // Get variable collections for additional context
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    const collectionsMap = {};
+    collections.forEach(collection => {
+      collectionsMap[collection.id] = {
+        id: collection.id,
+        name: collection.name,
+        modes: collection.modes
+      };
+    });
+    
+    // Format variables with collection information
+    const formattedVariables = variables.map(variable => ({
+      id: variable.id,
+      name: variable.name,
+      resolvedType: variable.resolvedType,
+      description: variable.description,
+      collection: collectionsMap[variable.variableCollectionId] || null,
+      // Get the current value for the first mode (for display purposes)
+      currentValue: variable.valuesByMode ? Object.values(variable.valuesByMode)[0] : null
+    }));
+    
+    return {
+      success: true,
+      variables: formattedVariables,
+      collections: Object.values(collectionsMap),
+      count: formattedVariables.length
+    };
+  } catch (error) {
+    throw new Error(`Error getting local variables: ${error.message}`);
+  }
+}
+
+// Create Variable Collection Function
+async function createVariableCollection(params) {
+  const { name } = params || {};
+  
+  if (!name) {
+    throw new Error("Missing name parameter");
+  }
+  
+  try {
+    const collection = figma.variables.createVariableCollection(name);
+    
+    return {
+      success: true,
+      id: collection.id,
+      name: collection.name,
+      modes: collection.modes
+    };
+  } catch (error) {
+    throw new Error(`Error creating variable collection: ${error.message}`);
+  }
+}
+
+// Create Color Variable Function
+async function createColorVariable(params) {
+  const { name, collectionId, color, modeId } = params || {};
+  
+  if (!name) {
+    throw new Error("Missing name parameter");
+  }
+  
+  if (!collectionId) {
+    throw new Error("Missing collectionId parameter");
+  }
+  
+  if (!color) {
+    throw new Error("Missing color parameter");
+  }
+  
+  try {
+    // Get the collection
+    const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+    if (!collection) {
+      throw new Error(`Variable collection not found with ID: ${collectionId}`);
+    }
+    
+    // Create the color variable
+    const variable = figma.variables.createVariable(name, collection, "COLOR");
+    
+    // Set the color value for the specified mode or the first mode
+    const targetModeId = modeId || collection.modes[0].modeId;
+    const colorValue = {
+      r: color.r,
+      g: color.g,
+      b: color.b,
+      a: color.a !== undefined ? color.a : 1
+    };
+    
+    variable.setValueForMode(targetModeId, colorValue);
+    
+    return {
+      success: true,
+      id: variable.id,
+      name: variable.name,
+      collectionName: collection.name,
+      modeId: targetModeId,
+      color: colorValue
+    };
+  } catch (error) {
+    throw new Error(`Error creating color variable: ${error.message}`);
+  }
+}
+
+// Bind Color to Variable Function
+async function bindColorToVariable(params) {
+  const { nodeId, variableId, property, paintIndex } = params || {};
+  
+  if (!nodeId) {
+    throw new Error("Missing nodeId parameter");
+  }
+  
+  if (!variableId) {
+    throw new Error("Missing variableId parameter");
+  }
+  
+  if (!property || !["fill", "stroke"].includes(property)) {
+    throw new Error("Missing or invalid property parameter. Must be 'fill' or 'stroke'");
+  }
+  
+  try {
+    const node = await figma.getNodeByIdAsync(nodeId);
+    if (!node) {
+      throw new Error(`Node not found with ID: ${nodeId}`);
+    }
+    
+    const variable = await figma.variables.getVariableByIdAsync(variableId);
+    if (!variable) {
+      throw new Error(`Variable not found with ID: ${variableId}`);
+    }
+    
+    if (variable.resolvedType !== 'COLOR') {
+      throw new Error(`Variable is not a color variable. Type: ${variable.resolvedType}`);
+    }
+    
+    const index = paintIndex || 0;
+    
+    if (property === "fill") {
+      // Check if node supports fills
+      if (!("fills" in node)) {
+        throw new Error(`Node type ${node.type} does not support fills`);
+      }
+      
+      const fills = [...node.fills];
+      if (index >= fills.length) {
+        throw new Error(`Fill index ${index} is out of range. Node has ${fills.length} fills`);
+      }
+      
+      // Bind the variable to the fill
+      fills[index] = figma.variables.setBoundVariableForPaint(
+        fills[index], 
+        'color', 
+        variable
+      );
+      node.fills = fills;
+      
+    } else if (property === "stroke") {
+      // Check if node supports strokes
+      if (!("strokes" in node)) {
+        throw new Error(`Node type ${node.type} does not support strokes`);
+      }
+      
+      const strokes = [...node.strokes];
+      if (index >= strokes.length) {
+        throw new Error(`Stroke index ${index} is out of range. Node has ${strokes.length} strokes`);
+      }
+      
+      // Bind the variable to the stroke
+      strokes[index] = figma.variables.setBoundVariableForPaint(
+        strokes[index], 
+        'color', 
+        variable
+      );
+      node.strokes = strokes;
+    }
+    
+    return {
+      success: true,
+      nodeId: node.id,
+      nodeName: node.name,
+      variableId: variable.id,
+      variableName: variable.name,
+      property: property,
+      paintIndex: index
+    };
+  } catch (error) {
+    throw new Error(`Error binding color to variable: ${error.message}`);
+  }
+}
+
+// Apply Variable to Multiple Nodes Function
+async function applyVariableToNodes(params) {
+  const { nodeIds, variableId, property, paintIndex } = params || {};
+  
+  if (!nodeIds || !Array.isArray(nodeIds) || nodeIds.length === 0) {
+    throw new Error("Missing or invalid nodeIds parameter");
+  }
+  
+  if (!variableId) {
+    throw new Error("Missing variableId parameter");
+  }
+  
+  if (!property || !["fill", "stroke"].includes(property)) {
+    throw new Error("Missing or invalid property parameter. Must be 'fill' or 'stroke'");
+  }
+  
+  try {
+    // Get the variable first to validate it
+    const variable = await figma.variables.getVariableByIdAsync(variableId);
+    if (!variable) {
+      throw new Error(`Variable not found with ID: ${variableId}`);
+    }
+    
+    if (variable.resolvedType !== 'COLOR') {
+      throw new Error(`Variable is not a color variable. Type: ${variable.resolvedType}`);
+    }
+    
+    const commandId = generateCommandId();
+    const index = paintIndex || 0;
+    const chunkSize = 10; // Process 10 nodes at a time
+    const totalNodes = nodeIds.length;
+    let processedNodes = 0;
+    let appliedCount = 0;
+    let failedCount = 0;
+    const results = [];
+    
+    sendProgressUpdate(
+      commandId,
+      "apply_variable_to_nodes",
+      "started",
+      0,
+      totalNodes,
+      0,
+      `Starting to apply variable "${variable.name}" to ${totalNodes} nodes`
+    );
+    
+    // Process nodes in chunks
+    for (let i = 0; i < nodeIds.length; i += chunkSize) {
+      const chunk = nodeIds.slice(i, i + chunkSize);
+      const chunkNumber = Math.floor(i / chunkSize) + 1;
+      const totalChunks = Math.ceil(nodeIds.length / chunkSize);
+      
+      for (const nodeId of chunk) {
+        try {
+          const node = await figma.getNodeByIdAsync(nodeId);
+          if (!node) {
+            throw new Error(`Node not found with ID: ${nodeId}`);
+          }
+          
+          if (property === "fill") {
+            if (!("fills" in node)) {
+              throw new Error(`Node type ${node.type} does not support fills`);
+            }
+            
+            const fills = [...node.fills];
+            if (index >= fills.length) {
+              throw new Error(`Fill index ${index} is out of range. Node has ${fills.length} fills`);
+            }
+            
+            fills[index] = figma.variables.setBoundVariableForPaint(
+              fills[index], 
+              'color', 
+              variable
+            );
+            node.fills = fills;
+            
+          } else if (property === "stroke") {
+            if (!("strokes" in node)) {
+              throw new Error(`Node type ${node.type} does not support strokes`);
+            }
+            
+            const strokes = [...node.strokes];
+            if (index >= strokes.length) {
+              throw new Error(`Stroke index ${index} is out of range. Node has ${strokes.length} strokes`);
+            }
+            
+            strokes[index] = figma.variables.setBoundVariableForPaint(
+              strokes[index], 
+              'color', 
+              variable
+            );
+            node.strokes = strokes;
+          }
+          
+          appliedCount++;
+          results.push({
+            success: true,
+            nodeId: node.id,
+            nodeName: node.name
+          });
+          
+        } catch (error) {
+          failedCount++;
+          results.push({
+            success: false,
+            nodeId: nodeId,
+            error: error.message
+          });
+        }
+        
+        processedNodes++;
+        
+        // Send progress update
+        sendProgressUpdate(
+          commandId,
+          "apply_variable_to_nodes",
+          "in_progress",
+          processedNodes / totalNodes,
+          totalNodes,
+          processedNodes,
+          `Processing node ${processedNodes}/${totalNodes} in chunk ${chunkNumber}/${totalChunks}`,
+          null,
+          chunkNumber,
+          totalChunks,
+          chunkSize
+        );
+      }
+      
+      // Small delay between chunks to prevent blocking
+      if (i + chunkSize < nodeIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+    }
+    
+    sendProgressUpdate(
+      commandId,
+      "apply_variable_to_nodes",
+      "completed",
+      1,
+      totalNodes,
+      totalNodes,
+      `Completed applying variable to ${appliedCount}/${totalNodes} nodes. ${failedCount} failed.`
+    );
+    
+    return {
+      success: true,
+      variableName: variable.name,
+      property: property,
+      appliedCount: appliedCount,
+      failedCount: failedCount,
+      totalNodes: totalNodes,
+      completedInChunks: Math.ceil(nodeIds.length / chunkSize),
+      results: results
+    };
+  } catch (error) {
+    throw new Error(`Error applying variable to nodes: ${error.message}`);
+  }
+}
+
+// Create Variable Mode Function
+async function createVariableMode(params) {
+  const { collectionId, name } = params || {};
+  
+  if (!collectionId) {
+    throw new Error("Missing collectionId parameter");
+  }
+  
+  if (!name) {
+    throw new Error("Missing name parameter");
+  }
+  
+  try {
+    const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+    if (!collection) {
+      throw new Error(`Variable collection not found with ID: ${collectionId}`);
+    }
+    
+    // Add a new mode to the collection (synchronous method)
+    const newModeId = collection.addMode(name);
+    
+    return {
+      id: newModeId,
+      name: name,
+      collectionName: collection.name,
+      collectionId: collection.id
+    };
+  } catch (error) {
+    throw new Error(`Error creating variable mode: ${error.message}`);
+  }
+}
+
+// Rename Variable Mode Function
+async function renameVariableMode(params) {
+  const { collectionId, modeId, name } = params || {};
+  
+  if (!collectionId) {
+    throw new Error("Missing collectionId parameter");
+  }
+  
+  if (!modeId) {
+    throw new Error("Missing modeId parameter");
+  }
+  
+  if (!name) {
+    throw new Error("Missing name parameter");
+  }
+  
+  try {
+    const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+    if (!collection) {
+      throw new Error(`Variable collection not found with ID: ${collectionId}`);
+    }
+    
+    // Find the mode to rename
+    const mode = collection.modes.find(m => m.modeId === modeId);
+    if (!mode) {
+      throw new Error(`Mode not found with ID: ${modeId}`);
+    }
+    
+    const oldName = mode.name;
+    
+    // Rename the mode (synchronous method)
+    collection.renameMode(modeId, name);
+    
+    return {
+      success: true,
+      oldName: oldName,
+      newName: name,
+      collectionName: collection.name,
+      modeId: modeId
+    };
+  } catch (error) {
+    throw new Error(`Error renaming variable mode: ${error.message}`);
+  }
+}
+
+// Remove Variable Mode Function
+async function removeVariableMode(params) {
+  const { collectionId, modeId } = params || {};
+  
+  if (!collectionId) {
+    throw new Error("Missing collectionId parameter");
+  }
+  
+  if (!modeId) {
+    throw new Error("Missing modeId parameter");
+  }
+  
+  try {
+    const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+    if (!collection) {
+      throw new Error(`Variable collection not found with ID: ${collectionId}`);
+    }
+    
+    // Find the mode to remove
+    const mode = collection.modes.find(m => m.modeId === modeId);
+    if (!mode) {
+      throw new Error(`Mode not found with ID: ${modeId}`);
+    }
+    
+    // Check if this is the last mode (can't remove the last mode)
+    if (collection.modes.length <= 1) {
+      throw new Error("Cannot remove the last mode from a variable collection");
+    }
+    
+    const removedModeName = mode.name;
+    
+    // Remove the mode (synchronous method)
+    collection.removeMode(modeId);
+    
+    return {
+      success: true,
+      removedModeName: removedModeName,
+      collectionName: collection.name,
+      modeId: modeId
+    };
+  } catch (error) {
+    throw new Error(`Error removing variable mode: ${error.message}`);
+  }
+}
+
+// Set Variable Value for Mode Function
+async function setVariableValueForMode(params) {
+  const { variableId, modeId, value } = params || {};
+  
+  if (!variableId) {
+    throw new Error("Missing variableId parameter");
+  }
+  
+  if (!modeId) {
+    throw new Error("Missing modeId parameter");
+  }
+  
+  if (value === undefined) {
+    throw new Error("Missing value parameter");
+  }
+  
+  try {
+    const variable = await figma.variables.getVariableByIdAsync(variableId);
+    if (!variable) {
+      throw new Error(`Variable not found with ID: ${variableId}`);
+    }
+    
+    const collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
+    if (!collection) {
+      throw new Error(`Variable collection not found for variable: ${variableId}`);
+    }
+    
+    // Find the mode
+    const mode = collection.modes.find(m => m.modeId === modeId);
+    if (!mode) {
+      throw new Error(`Mode not found with ID: ${modeId}`);
+    }
+    
+    // Set the value for the specific mode (synchronous method)
+    variable.setValueForMode(modeId, value);
+    
+    return {
+      success: true,
+      variableName: variable.name,
+      modeName: mode.name,
+      modeId: modeId,
+      value: value,
+      variableType: variable.resolvedType
+    };
+  } catch (error) {
+    throw new Error(`Error setting variable value for mode: ${error.message}`);
+  }
 }

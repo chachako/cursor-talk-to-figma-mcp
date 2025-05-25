@@ -178,6 +178,21 @@ The MCP server provides the following tools for interacting with Figma:
 - `set_node_name` - Set the name of any single node in Figma
 - `set_multiple_node_names` - Batch rename multiple nodes efficiently with intelligent chunking
 
+### Variables & Design Tokens
+
+- `get_local_variables` - Get all local variables from the current document with optional type filtering
+- `create_variable_collection` - Create a new variable collection for organizing design tokens
+- `create_color_variable` - Create a new color variable in a variable collection
+- `bind_color_to_variable` - Bind a node's color property (fill or stroke) to a variable
+- `apply_variable_to_nodes` - Apply a variable to multiple nodes at once with batch processing
+
+#### Variable Mode Management
+
+- `create_variable_mode` - Create a new mode in a variable collection (e.g., Light/Dark themes)
+- `rename_variable_mode` - Rename an existing mode in a variable collection
+- `remove_variable_mode` - Remove a mode from a variable collection (cannot remove the last mode)
+- `set_variable_value_for_mode` - Set a variable's value for a specific mode
+
 ### Components & Styles
 
 - `get_styles` - Get information about local styles
@@ -201,6 +216,7 @@ The MCP server includes several helper prompts to guide you through complex desi
 - `design_strategy` - Best practices for working with Figma designs
 - `read_design_strategy` - Best practices for reading Figma designs
 - `layer_naming_strategy` - Best practices for naming layers in Figma designs with consistent conventions
+- `variable_management_strategy` - Comprehensive guide for working with Figma variables and design tokens
 - `text_replacement_strategy` - Systematic approach for replacing text in Figma designs
 - `annotation_conversion_strategy` - Strategy for converting manual annotations to Figma's native annotations
 - `swap_overrides_instances` - Strategy for transferring overrides between component instances in Figma
@@ -255,7 +271,16 @@ When working with the Figma MCP:
     - Use `set_multiple_node_names` for batch renaming operations
     - Follow the `layer_naming_strategy` prompt for best practices
     - Scan node structure first using `scan_nodes_by_types` before bulk operations
-12. Visualize prototype noodles as FigJam connectors:
+12. For design tokens and variables:
+    - Start with `get_local_variables()` to audit existing variables
+    - Create organized collections with `create_variable_collection` before adding variables
+    - Use semantic naming (Primary/500, Gray/100) rather than descriptive names (Blue, Light Gray)
+    - Apply variables systematically with `bind_color_to_variable` for single nodes
+    - Use `apply_variable_to_nodes` for batch operations with progress tracking
+    - Create meaningful modes with `create_variable_mode` for themes (Light/Dark/High Contrast)
+    - Set values for all modes using `set_variable_value_for_mode` when creating variables
+    - Follow the `variable_management_strategy` prompt for comprehensive workflows
+13. Visualize prototype noodles as FigJam connectors:
 
 - Use `get_reactions` to extract prototype flows,
 - set a default connector with `set_default_connector`,
