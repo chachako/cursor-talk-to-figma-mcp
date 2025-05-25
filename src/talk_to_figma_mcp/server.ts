@@ -938,6 +938,146 @@ server.tool(
   }
 );
 
+// Set Node Name Tool
+server.tool(
+  "set_node_name",
+  "Set the name of any node in Figma",
+  {
+    nodeId: z.string().describe("The ID of the node to rename"),
+    name: z.string().describe("New name for the node"),
+  },
+  async ({ nodeId, name }) => {
+    try {
+      const result = await sendCommandToFigma("set_node_name", {
+        nodeId,
+        name,
+      });
+      const typedResult = result as { success: boolean; previousName?: string };
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully renamed node to "${name}"${typedResult.previousName ? ` (was "${typedResult.previousName}")` : ''}`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error setting node name: ${error instanceof Error ? error.message : String(error)
+              }`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+// Set Multiple Node Names Tool
+server.tool(
+  "set_multiple_node_names",
+  "Set the names of multiple nodes in Figma in batch",
+  {
+    nodeId: z.string().describe("The ID of the parent node containing the nodes to rename"),
+    names: z
+      .array(
+        z.object({
+          nodeId: z.string().describe("The ID of the node to rename"),
+          name: z.string().describe("New name for the node"),
+        })
+      )
+      .describe("Array of node IDs and their new names"),
+  },
+  async ({ nodeId, names }, extra) => {
+    try {
+      if (!names || names.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No names provided",
+            },
+          ],
+        };
+      }
+
+      // Initial response to indicate we're starting the process
+      const initialStatus = {
+        type: "text" as const,
+        text: `Starting batch rename for ${names.length} nodes. This will be processed in batches of 5...`,
+      };
+
+      // Use the plugin's set_multiple_node_names function with chunking
+      const result = await sendCommandToFigma("set_multiple_node_names", {
+        nodeId,
+        names,
+      });
+
+      // Cast the result to a specific type to work with it safely
+      interface RenameResult {
+        success: boolean;
+        nodeId: string;
+        renamedCount?: number;
+        failedCount?: number;
+        totalNodes?: number;
+        completedInChunks?: number;
+        results?: Array<{
+          success: boolean;
+          nodeId: string;
+          previousName?: string;
+          newName?: string;
+          error?: string;
+        }>;
+      }
+
+      const typedResult = result as RenameResult;
+
+      // Format the results for display
+      const success = typedResult.renamedCount && typedResult.renamedCount > 0;
+      const progressText = `
+      Batch rename completed:
+      - ${typedResult.renamedCount || 0} of ${names.length} successfully renamed
+      - ${typedResult.failedCount || 0} failed
+      - Processed in ${typedResult.completedInChunks || 1} batches
+      `;
+
+      // Detailed results
+      const detailedResults = typedResult.results || [];
+      const failedResults = detailedResults.filter(item => !item.success);
+
+      // Create the detailed part of the response
+      let detailedResponse = "";
+      if (failedResults.length > 0) {
+        detailedResponse = `\n\nNodes that failed:\n${failedResults.map(item =>
+          `- ${item.nodeId}: ${item.error || "Unknown error"}`
+        ).join('\n')}`;
+      }
+
+      return {
+        content: [
+          initialStatus,
+          {
+            type: "text" as const,
+            text: progressText + detailedResponse,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error setting multiple node names: ${error instanceof Error ? error.message : String(error)
+              }`,
+          },
+        ],
+      };
+    }
+  }
+);
+
 // Get Styles Tool
 server.tool(
   "get_styles",
@@ -1368,6 +1508,104 @@ server.tool(
         ],
       };
     }
+  }
+);
+
+// Layer Naming Strategy Prompt
+server.prompt(
+  "layer_naming_strategy",
+  "Best practices for naming layers in Figma designs",
+  (extra) => {
+    return {
+      messages: [
+        {
+          role: "assistant",
+          content: {
+            type: "text",
+            text: `When naming layers in Figma, follow these best practices:
+
+1. Use Descriptive and Semantic Names:
+   - Good examples: "Login Button", "User Avatar", "Navigation Menu"
+   - Avoid generic names: "Rectangle 1", "Frame 23", "Text"
+
+2. Maintain Consistent Naming Conventions:
+   - Use unified language (English or your preferred language)
+   - Follow consistent patterns and case rules
+   - Use consistent prefixes or suffixes for similar components
+
+3. Establish Hierarchy Through Names:
+   - Parent containers should have descriptive names
+   - Child element names should reflect their role within parent
+   - Use grouping to reflect design hierarchy
+
+4. Tools for Layer Naming:
+
+   Single layer rename:
+   set_node_name({
+     nodeId: "123:456",
+     name: "Header Container"
+   })
+
+   Batch layer rename:
+   set_multiple_node_names({
+     nodeId: "parent-frame-id",
+     names: [
+       { nodeId: "123:456", name: "Navigation Bar" },
+       { nodeId: "123:457", name: "Logo" },
+       { nodeId: "123:458", name: "User Menu" }
+     ]
+   })
+
+5. Common Naming Patterns:
+
+   UI Components:
+   - Buttons: "Login Button", "Submit Button", "Cancel Button"
+   - Inputs: "Email Input", "Password Input", "Search Field"
+   - Icons: "User Icon", "Settings Icon", "Delete Icon"
+   - Containers: "Header Container", "Content Area", "Sidebar"
+
+   Component States:
+   - Default: "Button - Default"
+   - Hover: "Button - Hover"
+   - Disabled: "Button - Disabled"
+   - Selected: "Button - Selected"
+
+   Responsive Variants:
+   - Desktop: "Desktop - Navigation"
+   - Tablet: "Tablet - Navigation"
+   - Mobile: "Mobile - Navigation"
+
+6. Batch Renaming Workflow:
+
+   Step 1: Analyze structure
+   - Use get_selection() to understand current selection
+   - Use scan_nodes_by_types() to identify node types
+
+   Step 2: Plan naming strategy
+   - Determine semantic names based on design intent
+   - Ensure consistency and readability
+
+   Step 3: Execute batch rename
+   - Use set_multiple_node_names() for efficiency
+   - Process in chunks for large designs
+
+   Step 4: Verify results
+   - Check layer panel for meaningful names
+   - Validate naming consistency
+
+7. Best Practices:
+   - Start with main containers, then work to specific elements
+   - Use scanning tools to understand structure first
+   - Prefer batch processing for large designs
+   - Keep names concise but descriptive
+   - Establish team naming conventions for collaboration
+
+Proper layer naming improves design organization, maintainability, and team collaboration.`,
+          },
+        },
+      ],
+      description: "Best practices for naming layers in Figma designs",
+    };
   }
 );
 
@@ -2569,6 +2807,8 @@ type FigmaCommand =
   | "set_corner_radius"
   | "clone_node"
   | "set_text_content"
+  | "set_node_name"
+  | "set_multiple_node_names"
   | "scan_text_nodes"
   | "set_multiple_text_contents"
   | "get_annotations"
@@ -2688,6 +2928,14 @@ type CommandParams = {
   set_text_content: {
     nodeId: string;
     text: string;
+  };
+  set_node_name: {
+    nodeId: string;
+    name: string;
+  };
+  set_multiple_node_names: {
+    nodeId: string;
+    names: Array<{ nodeId: string; name: string }>;
   };
   scan_text_nodes: {
     nodeId: string;

@@ -153,6 +153,10 @@ async function handleCommand(command, params) {
       return await setCornerRadius(params);
     case "set_text_content":
       return await setTextContent(params);
+    case "set_node_name":
+      return await setNodeName(params);
+    case "set_multiple_node_names":
+      return await setMultipleNodeNames(params);
     case "clone_node":
       return await cloneNode(params);
     case "scan_text_nodes":
@@ -1385,6 +1389,134 @@ async function setTextContent(params) {
   } catch (error) {
     throw new Error(`Error setting text content: ${error.message}`);
   }
+}
+
+async function setNodeName(params) {
+  const { nodeId, name } = params || {};
+
+  if (!nodeId) {
+    throw new Error("Missing nodeId parameter");
+  }
+
+  if (name === undefined) {
+    throw new Error("Missing name parameter");
+  }
+
+  const node = await figma.getNodeByIdAsync(nodeId);
+  if (!node) {
+    throw new Error(`Node not found with ID: ${nodeId}`);
+  }
+
+  const previousName = node.name;
+  
+  try {
+    node.name = name;
+    
+    return {
+      success: true,
+      nodeId: node.id,
+      previousName,
+      newName: node.name,
+    };
+  } catch (error) {
+    throw new Error(`Error setting node name: ${error.message}`);
+  }
+}
+
+async function setMultipleNodeNames(params) {
+  const { nodeId, names } = params || {};
+
+  if (!nodeId) {
+    throw new Error("Missing nodeId parameter");
+  }
+
+  if (!names || !Array.isArray(names) || names.length === 0) {
+    throw new Error("Missing or invalid names parameter - must be a non-empty array");
+  }
+
+  // Get parent node
+  const parentNode = await figma.getNodeByIdAsync(nodeId);
+  if (!parentNode) {
+    throw new Error(`Parent node not found with ID: ${nodeId}`);
+  }
+
+  const results = [];
+  const errors = [];
+  const commandId = generateCommandId();
+
+  // Send initial progress update
+  sendProgressUpdate(
+    commandId,
+    "set_multiple_node_names",
+    "starting",
+    0,
+    names.length,
+    0,
+    `Starting to rename ${names.length} nodes...`
+  );
+
+  // Process each name change
+  for (let i = 0; i < names.length; i++) {
+    const { nodeId: targetNodeId, name } = names[i];
+    
+    try {
+      const targetNode = await figma.getNodeByIdAsync(targetNodeId);
+      if (!targetNode) {
+        errors.push({
+          nodeId: targetNodeId,
+          error: `Node not found with ID: ${targetNodeId}`,
+        });
+        continue;
+      }
+
+      const previousName = targetNode.name;
+      targetNode.name = name;
+
+      results.push({
+        nodeId: targetNodeId,
+        previousName,
+        newName: targetNode.name,
+        success: true,
+      });
+
+      // Send progress update
+      const progress = Math.round(((i + 1) / names.length) * 100);
+      sendProgressUpdate(
+        commandId,
+        "set_multiple_node_names",
+        "processing",
+        progress,
+        names.length,
+        i + 1,
+        `Renamed "${previousName}" to "${name}"`
+      );
+
+    } catch (error) {
+      errors.push({
+        nodeId: targetNodeId,
+        error: error.message,
+      });
+    }
+  }
+
+  // Send completion update
+  sendProgressUpdate(
+    commandId,
+    "set_multiple_node_names",
+    "completed",
+    100,
+    names.length,
+    results.length,
+    `Completed renaming. ${results.length} successful, ${errors.length} failed.`
+  );
+
+  return {
+    success: true,
+    processedCount: results.length,
+    errorCount: errors.length,
+    results,
+    errors,
+  };
 }
 
 // Initialize settings on load

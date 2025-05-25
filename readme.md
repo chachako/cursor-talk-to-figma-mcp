@@ -172,6 +172,11 @@ The MCP server provides the following tools for interacting with Figma:
 - `delete_multiple_nodes` - Delete multiple nodes at once efficiently
 - `clone_node` - Create a copy of an existing node with optional position offset
 
+### Layer Naming
+
+- `set_node_name` - Set the name of any single node in Figma
+- `set_multiple_node_names` - Batch rename multiple nodes efficiently with intelligent chunking
+
 ### Components & Styles
 
 - `get_styles` - Get information about local styles
@@ -194,6 +199,7 @@ The MCP server includes several helper prompts to guide you through complex desi
 
 - `design_strategy` - Best practices for working with Figma designs
 - `read_design_strategy` - Best practices for reading Figma designs
+- `layer_naming_strategy` - Best practices for naming layers in Figma designs with consistent conventions
 - `text_replacement_strategy` - Systematic approach for replacing text in Figma designs
 - `annotation_conversion_strategy` - Strategy for converting manual annotations to Figma's native annotations
 - `swap_overrides_instances` - Strategy for transferring overrides between component instances in Figma
@@ -241,7 +247,14 @@ When working with the Figma MCP:
     - Create native annotations with `set_multiple_annotations` in batches
     - Verify all annotations are properly linked to their targets
     - Delete legacy annotation nodes after successful conversion
-11. Visualize prototype noodles as FigJam connectors:
+11. For layer naming and organization:
+    - Use descriptive, semantic names for all elements
+    - Maintain consistent naming conventions across your design
+    - Use `set_node_name` for individual layer renaming
+    - Use `set_multiple_node_names` for batch renaming operations
+    - Follow the `layer_naming_strategy` prompt for best practices
+    - Scan node structure first using `scan_nodes_by_types` before bulk operations
+12. Visualize prototype noodles as FigJam connectors:
 
 - Use `get_reactions` to extract prototype flows,
 - set a default connector with `set_default_connector`,
