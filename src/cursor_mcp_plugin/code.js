@@ -4155,46 +4155,70 @@ async function createConnections(params) {
 
 // Get Local Variables Function
 async function getLocalVariables(params) {
-  const { type } = params || {};
-  
   try {
-    let variables;
-    if (type) {
-      variables = await figma.variables.getLocalVariablesAsync(type);
-    } else {
-      variables = await figma.variables.getLocalVariablesAsync();
-    }
-    
-    // Get variable collections for additional context
+    const variables = await figma.variables.getLocalVariablesAsync(
+      params.type || undefined
+    );
     const collections = await figma.variables.getLocalVariableCollectionsAsync();
+
+    // Create a map for quick lookup of collection names
     const collectionsMap = {};
     collections.forEach(collection => {
       collectionsMap[collection.id] = {
         id: collection.id,
         name: collection.name,
-        modes: collection.modes
+        modes: collection.modes.map(m => ({ modeId: m.modeId, name: m.name })) // Store mode details
       };
     });
     
-    // Format variables with collection information
-    const formattedVariables = variables.map(variable => ({
-      id: variable.id,
-      name: variable.name,
-      resolvedType: variable.resolvedType,
-      description: variable.description,
-      collection: collectionsMap[variable.variableCollectionId] || null,
-      // Get the current value for the first mode (for display purposes)
-      currentValue: variable.valuesByMode ? Object.values(variable.valuesByMode)[0] : null
-    }));
+    // Format variables with collection information and all mode values
+    const formattedVariables = variables.map(variable => {
+      const collectionInfo = collectionsMap[variable.variableCollectionId];
+      let modeValues = [];
+      if (collectionInfo && collectionInfo.modes && variable.valuesByMode) {
+        modeValues = collectionInfo.modes.map(mode => {
+          let value = variable.valuesByMode[mode.modeId];
+          if (variable.resolvedType === 'COLOR' && value) {
+            const originalColorCopy = Object.assign({}, value);
+            value = {
+              rgba: originalColorCopy,
+              hex: rgbaToHex(originalColorCopy)
+            };
+          }
+          return {
+            modeId: mode.modeId,
+            modeName: mode.name,
+            value: value
+          };
+        });
+      }
+      
+      return {
+        id: variable.id,
+        name: variable.name,
+        resolvedType: variable.resolvedType,
+        description: variable.description,
+        collectionId: variable.variableCollectionId,
+        collectionName: collectionInfo ? collectionInfo.name : null,
+        modes: modeValues // Replace currentValue with modes array
+      };
+    });
     
     return {
       success: true,
       variables: formattedVariables,
-      collections: Object.values(collectionsMap),
+      // Optionally, still return collections separately if useful for other purposes
+      // collections: Object.values(collectionsMap),
       count: formattedVariables.length
     };
   } catch (error) {
-    throw new Error(`Error getting local variables: ${error.message}`);
+    return {
+      success: false,
+      error: `Error fetching local variables: ${error.message}`,
+      variables: [],
+      collections: [],
+      count: 0
+    };
   }
 }
 

@@ -180,7 +180,17 @@ The MCP server provides the following tools for interacting with Figma:
 
 ### Variables & Design Tokens
 
-- `get_local_variables` - Get all local variables from the current document with optional type filtering
+- `get_local_variables` - Get all local variables from the current document. Can be filtered by type (e.g., `COLOR`, `FLOAT`). Returns an array of variable objects. Each variable object includes:
+    - `id`: (string) The ID of the variable.
+    - `name`: (string) The name of the variable.
+    - `resolvedType`: (string) The resolved type of the variable (e.g., `COLOR`, `FLOAT`, `STRING`, `BOOLEAN`).
+    - `description`: (string) The description of the variable.
+    - `collectionId`: (string) The ID of the variable collection this variable belongs to.
+    - `collectionName`: (string) The name of the variable collection.
+    - `modes`: (array) An array of objects, where each object represents a mode and its value for this variable:
+        - `modeId`: (string) The ID of the mode.
+        - `modeName`: (string) The name of the mode.
+        - `value`: (any) The value of the variable in this specific mode.
 - `create_variable_collection` - Create a new variable collection for organizing design tokens
 - `create_color_variable` - Create a new color variable in a variable collection
 - `bind_color_to_variable` - Bind a node's color property (fill or stroke) to a variable
